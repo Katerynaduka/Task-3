@@ -1,0 +1,64 @@
+import time
+import threading
+from multiprocessing.pool import ThreadPool
+
+// Функція для обчислення кроків за гіпотезою Коллатца
+def collatz_steps(number):
+    steps = 0
+    while number != 1:
+        if number % 2 == 0:
+            number //= 2
+        else:
+            number = 3 * number + 1
+        steps += 1
+    return steps
+
+// Окремий потік для обробки чисел
+def worker(start, end, total_steps, lock):
+    local_steps = 0
+    print(f"Потік {start}-{end} почав обчислення")  // Діагностика початку роботи потоку
+    for number in range(start, end):
+        steps = collatz_steps(number)
+        local_steps += steps
+    
+    print(f"Потік {start}-{end} завершив обчислення. Локальні кроки: {local_steps}")  // Діагностика завершення потоку
+    
+    // Атомарне збільшення кроків за допомогою Lock
+    with lock:
+        total_steps[0] += local_steps
+    print(f"Потік {start}-{end} оновив total_steps: {total_steps[0]}")  // Діагностика атомарного оновлення
+
+// Основна функція для паралельного обчислення
+def main(total_numbers, num_threads):
+    total_steps = [0]  // Список для атомарного доступу
+    lock = threading.Lock()  // Lock для синхронізації
+
+    // Розподіл завдань на потоки
+    chunk_size = total_numbers // num_threads
+    pool = ThreadPool(num_threads)
+
+    results = []
+    for i in range(num_threads):
+        start = i * chunk_size + 1
+        end = (i + 1) * chunk_size + 1 if i != num_threads - 1 else total_numbers + 1
+        results.append(pool.apply_async(worker, (start, end, total_steps, lock)))
+
+    // Чекання на завершення всіх потоків
+    for result in results:
+        result.get()
+
+    // Підрахунок середньої кількості кроків
+    average_steps = total_steps[0] / total_numbers
+    print(f"Середня кількість кроків для {total_numbers} чисел: {average_steps:.2f}")
+
+if __name__ == "__main__":
+    TOTAL_NUMBERS = 1_000_000  // Кількість чисел для обчислення
+    NUM_THREADS = 4            // Кількість потоків
+
+    print("Програма розпочала роботу")  // Діагностика початку програми
+
+    start_time = time.time()
+    main(TOTAL_NUMBERS, NUM_THREADS)
+    end_time = time.time()
+
+    print(f"Час виконання: {end_time - start_time:.2f} секунд")
